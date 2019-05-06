@@ -6,9 +6,17 @@ from scipy.optimize import curve_fit
 
 
 #all file names. This is in a dictionary, so access a certain subsection of files by using files['calibration'], files['sodium'], etc.
+'''
+taken out
+
+		'calibration_mercury_firstDoublet_53_1'
+
+'calibration_neon_triple_2_53'
+'''
+
 
 files = {'calibration': ['calibration_neon_triple_1_53',\
-		'calibration_neon_triple_2_53', \
+		
 		'calibration_neon_triple_3_53', \
         'calibration_mercury_3560_triple_53_1',\
 		'calibration_mercury_3560_triple_53_2',\
@@ -17,8 +25,7 @@ files = {'calibration': ['calibration_neon_triple_1_53',\
 		'calibration_mercury_4358_53',\
         'calibration_mercury_5460_53', \
         'calibration_mercury_yellowDoublet_53_1',\
-		'calibration_mercury_yellowDoublet_53_2',\
-		'calibration_mercury_firstDoublet_53_1'],\
+		'calibration_mercury_yellowDoublet_53_2'],\
         'Deut':['DeutHydro_32_53_1',\
 		'DeutHydro_32_53_2',\
 		'DeutHydro_42_53_1',\
@@ -137,7 +144,14 @@ def plotCalibration(calibs):
 	"""
 	does a fit of all the calibration files, returns the best fit function
 	"""
-	
+	def getChi(func, xdata, ydata, error):
+	# returns the chi2 values and total for the plot
+		chis = []
+		for i in range(len(xdata)):
+			err = func(xdata[i])-ydata[i]
+			chis.append((err/error[i])**2)
+		return chis, sum(chis)
+
 	
 	# sets up the plot
 	fig = plt.figure()
@@ -153,13 +167,21 @@ def plotCalibration(calibs):
 		
 	# weird one I dont want to worry about fixing
 	means[1] = 6258.01
-	error[1] = 0.6
+	error[1] = 0.06
 
 	#actual values for all of the calibration wavelengths
-	actual = [6266.495, 6304.7889, 6328.1646, 3650.153, 3654.836, 3663.279, 4046.563, 4358.328, 5460.735, 5769.598, 5790.663, 3131.548]
+	actual = [6266.495, 6304.7889, 3650.153, 3654.836, 3663.279, 4046.563, 4358.328, 5460.735, 5769.598, 5790.663]
 	
+
+	'''
+	taken out
+, 3131.548
+, 6328.1646
+	'''
+
+	dif = [actual[i] - means[i] for i in range(len(means))]
 	# plots the calibration points
-	axe.scatter(means, actual, color='red', marker='x')
+	axe.scatter(means,dif , color='red', marker='x')
 	
 	
 	
@@ -175,7 +197,7 @@ def plotCalibration(calibs):
 
 
 	# fits the parameters
-	popt, pcov = curve_fit(quad, means, actual, maxfev=20000)
+	popt, pcov = curve_fit(quad, means, dif, maxfev=20000, sigma=error)
 		
 		
 	# plots the fit
@@ -187,34 +209,73 @@ def plotCalibration(calibs):
 	axe2 = fig.add_subplot(212)
 	axe2.plot(x, [0]*len(x))
 		
-	axe2.scatter(means, [actual[i]-quad(means[i], popt[0], popt[1], popt[2]) for i in range(len(means))], color = 'black', marker = 'v')
+	#axe2.scatter(means, [dif[i]-quad(means[i], popt[0], popt[1], popt[2]) for i in range(len(means))], color = 'black', marker = 'v')
+	for i in range(len(means)):
+		axe2.errorbar(means[i], dif[i]-quad(means[i], popt[0], popt[1], popt[2]), xerr = 0, yerr = error[i], color = 'purple', fmt = '--o', capsize = 5)
 	
-	print(popt)
-	plt.show()
+	print('A = ' + str(popt[0]))
+	print('B = ' + str(popt[1]))
+	print('C = ' + str(popt[2]))
 	
+	
+	func = lambda x: quad(x,popt[0], popt[1], popt[2])
+
+	chi = getChi(func, means, dif, error)
+	print('Chi2 = ' + str(chi[1]/7))
 	#returns the functional fit
-	return lambda x: quad(x,popt[0], popt[1], popt[2])
+	return func
 
 
-def getChi(func, xdata, ydata, error):
-	# returns the chi2 values and total for the plot
-	chis = []
-	for i in range(len(xdata)):
-		err = func(xdata[i])-ydata[i]
-		chis.append((err/error[i])**2)
-	return chis, sum(chis)
+
+
 
 
 fit = plotCalibration(files['calibration'])
 
 rydFiles = [files['Deut'][2*i+1] for i in range(len(files['Deut'])//2)]
 
-means = [fit(getFit(i)[1]) for i in rydFiles]
+means = [getFit(i)[1]+fit(getFit(i)[1]) for i in rydFiles]
 jumps = [3,4,5,6]
 ryd = []
 for i in range(len(means)):
 	levels = (1/4-1/jumps[i]**2)
 	ryd.append(1/means[i]/levels)
 act = 10967759.3
-print(np.average(ryd))
-print(100*(np.average(ryd)*10**10-act)/act)
+print('Rydberg = ' + str(np.average(ryd)))
+print('Error (percent) = ' + str(100*(np.average(ryd)*10**10-act)/act))
+
+plt.show()
+
+
+
+"""
+Now were getting the mass ratio
+"""
+
+nf = 2 # balmer series
+ni = [3,4,5,6]
+mh = 1.6726219*10**(-27)
+me = 9.10938356*10**(-31)
+shifts = []
+print('\n\n\n')
+for i in range(len(files['Deut'])//2):
+	deut = getFit(files['Deut'][2*i])[1]
+	deut += fit(deut)
+	hydr = getFit(files['Deut'][2*i+1])[1]
+	hydr += fit(hydr)
+	shift = (hydr-deut)*10**(-10) #angstroms
+	shifts.append(shift)
+
+
+print(np.average(ryd)*10**10)
+ratio = []
+
+shift = 0.176*10**(-9)
+rinf = 10973731
+print(shift*rinf*mh/me*(0.25-1/9.0))
+for i in range(4):
+	ratio.append(1- shifts[i]*np.average(ryd)*10**10*(mh+me)/me*(1/4.0-1/float(ni[i]**2)))
+
+print(ratio)
+print("Ratio = " +str(np.average(ratio)))
+print((np.average(ratio)-0.4963)/0.4963)
