@@ -21,6 +21,7 @@ files = {'calibration': ['calibration_neon_triple_1_53',\
         'calibration_mercury_3560_triple_53_1',\
 		'calibration_mercury_3560_triple_53_2',\
         'calibration_mercury_3560_triple_53_3', \
+
         'calibration_mercury_4046_53',\
 		'calibration_mercury_4358_53',\
         'calibration_mercury_5460_53', \
@@ -134,7 +135,9 @@ def plotFit(fileName):
 		plt.title(fileName)
 		plt.show()
 
-	
+
+
+
 # 12 colors you can use to color code the calibration if you want	
 colors = ['orange', 'red', 'green', 'blue', 'black', 'm', 'cyan', 'brown', 'purple', 'silver', 'yellow', 'pink']
 
@@ -181,8 +184,8 @@ def plotCalibration(calibs):
 
 	dif = [actual[i] - means[i] for i in range(len(means))]
 	# plots the calibration points
-	axe.scatter(means,dif , color='red', marker='x')
-	
+	axe.scatter(means,dif , color='red', marker='x', label = 'measurements')
+	axe.set_ylabel(r'Offset wavelength $(\AA)$', fontsize = 16)
 	
 	
 	# defining functions for the fits
@@ -202,23 +205,28 @@ def plotCalibration(calibs):
 		
 	# plots the fit
 	x = np.linspace(3000,6500, 10000)
-	axe.plot(x, [quad(i, popt[0], popt[1], popt[2]) for i in x], color='blue')
+	axe.plot(x, [quad(i, popt[0], popt[1], popt[2]) for i in x], color='blue', label='Quadratic Fit')
 	
-	
+	plt.legend()
 	# sets up the residual plot
 	axe2 = fig.add_subplot(212)
 	axe2.plot(x, [0]*len(x))
-		
+	errors = []
+	print(pcov)
+	for i, x in enumerate(means):
+		errors.append(x**4*pcov[0][0] + x**2*pcov[1][1]+pcov[2][2]+(2*popt[0]*x+popt[1])*error[i]**2+popt[0]*(x**3*pcov[0][1]+x**2*pcov[0][2]+x*pcov[1][2]))	
 	#axe2.scatter(means, [dif[i]-quad(means[i], popt[0], popt[1], popt[2]) for i in range(len(means))], color = 'black', marker = 'v')
-	for i in range(len(means)):
+	axe2.errorbar(means[i], dif[0]-quad(means[0], popt[0], popt[1], popt[2]), xerr = 0, yerr = error[0], color = 'purple', fmt = '--o', capsize = 5, label='error')
+	for i in range(1, len(means)):
 		axe2.errorbar(means[i], dif[i]-quad(means[i], popt[0], popt[1], popt[2]), xerr = 0, yerr = error[i], color = 'purple', fmt = '--o', capsize = 5)
-	
+	axe2.set_ylabel(r'Residual $(\AA)$', fontsize=16)
+	axe2.set_xlabel(r'Measured Wavelength $(\AA)$', fontsize = 16)
 	print('A = ' + str(popt[0]))
 	print('B = ' + str(popt[1]))
 	print('C = ' + str(popt[2]))
-	
-	
-	func = lambda x: quad(x,popt[0], popt[1], popt[2])
+	print(pcov)
+	plt.legend()
+	func = lambda x: 1.0003*quad(x,popt[0], popt[1], popt[2])
 
 	chi = getChi(func, means, dif, error)
 	print('Chi2 = ' + str(chi[1]/7))
@@ -248,10 +256,31 @@ plt.show()
 
 
 
+inv = [1/(i*10**(-10)) for i in means]
+drop = [0.25 - 1/i**2 for i in [3.0,4.0,5.0,6.0]]
+axe = plt.figure().add_subplot(111)
+axe.scatter(drop,inv, color='red', label = 'Balmer Series Measurements')
+for i in range(len(means)):
+	print('here')
+	print((inv[i])**4*(0.05*10**(-10))**2)
+	print(inv[i])
+	plt.errorbar(drop[i], inv[i], yerr = (inv[i])**2*(0.05*10**(-10)), capsize=5, color='red')
+def lin(x,m,b):
+	return m*x+b
+popt, pcov = curve_fit(lin, drop, inv)
+print(pcov)
+print('popt')
+x = np.linspace(0.1, 0.3, 1000)
+axe.plot(x, lin(x, popt[0], popt[1]), color = 'blue', label = 'Fit')
+print('Rydberg2: ' + str(popt[0]))
+print('Error2 (percent) = ' + str(100*(popt[0]-act)/act))
+axe.set_xlabel(r'$\frac{1}{n_i^2} - \frac{1}{x^2}$', fontsize=16)
+axe.set_ylabel(r'$\frac{1}{\lambda}$ (m$^{-1}$)', fontsize=18)
 """
 Now were getting the mass ratio
 """
-
+plt.legend()
+# plt.show()
 nf = 2 # balmer series
 ni = [3,4,5,6]
 mh = 1.6726219*10**(-27)
@@ -279,3 +308,4 @@ for i in range(4):
 print(ratio)
 print("Ratio = " +str(np.average(ratio)))
 print((np.average(ratio)-0.4963)/0.4963)
+print(np.std(ratio))
